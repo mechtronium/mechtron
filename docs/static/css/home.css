@@ -1,0 +1,43 @@
+#panel  {
+ width: 640px;
+ margin-left: auto;
+ margin-right: auto;
+ border-radius: 15px;
+ color: #cccccc; 
+ margin-left: auto;
+ margin-right: auto;
+ border-radius: 15px;
+ color: #cccccc;
+ text-align: left;
+
+ font-size: xx-large;
+ padding: 25px;
+}
+
+#panel > a {
+  
+}
+
+#panel > p {
+  margin-bottom: 25px;
+  text-align: left;
+  color: black;
+ font-family: "Geo";
+  font-size: xx-large;
+}
+
+#panel > ul > li {
+  margin-bottom: 25px;
+  text-align: left;
+  color: black;
+ font-family: "Geo";
+  font-size: xx-large;
+}
+
+
+
+a {
+  color: black;
+}
+
+

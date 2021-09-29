@@ -1,0 +1,24 @@
+apiVersion: skaffold/v1
+kind: Config
+build:
+  tagPolicy:
+    gitCommit: {}
+
+  artifacts:
+  - image: docker.io/starlane/mechtron-docs
+    context: docs
+
+
+
+deploy:
+  helm:
+    flags:
+
+    releases:
+    - name: mechtron
+      namespace: scott
+      chartPath: charts/docs 
+      values:
+        mechtron: docker.io/starlane/mechtron-docs
+
+
