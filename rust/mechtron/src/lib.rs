@@ -1,4 +1,6 @@
-pub mod error;
+#![allow(warnings)]
+//# ! [feature(unboxed_closures)]
+#[no_std]
 
 //#[macro_use]
 //extern crate wasm_bindgen;
@@ -6,32 +8,34 @@ pub mod error;
 #[macro_use]
 extern crate lazy_static;
 
+pub mod error;
+
 use crate::error::Error;
-use mechtron_common::outlet;
-use mechtron_common::outlet::Frame;
-use mesh_portal::version::latest::config::ResourceConfigBody;
-use mesh_portal::version::latest::entity::request::Action;
-use mesh_portal::version::latest::entity::response::ResponseCore;
-use mesh_portal::version::latest::frame::CloseReason;
-use mesh_portal::version::latest::http::HttpRequest;
-use mesh_portal::version::latest::id::Address;
-use mesh_portal::version::latest::messaging::{ProtoRequest, Request, Response};
-use mesh_portal::version::latest::msg::MsgRequest;
-use mesh_portal::version::latest::payload::{Errors, Payload, Primitive};
-use mesh_portal::version::latest::resource::ResourceStub;
+
 use mesh_portal::version::latest::util::unique_id;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 use std::sync::RwLock;
+use mesh_portal::version::latest::config::ResourceConfigBody;
+use mesh_portal::version::latest::entity::request::Action;
+use mesh_portal::version::latest::entity::response::ResponseCore;
+use mesh_portal::version::latest::frame::CloseReason;
+use mesh_portal::version::latest::http::HttpRequest;
+use mesh_portal::version::latest::messaging::{ProtoRequest, Request, Response};
+use mesh_portal::version::latest::msg::MsgRequest;
+use mesh_portal::version::latest::portal::outlet;
+use mesh_portal::version::latest::particle::Stub;
+use mesh_portal::version::latest::id::Point;
+use mesh_portal::version::latest::portal::outlet::Frame;
 //use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_membrane_guest::membrane::{log, membrane_consume_buffer, membrane_read_buffer, membrane_read_string, membrane_write_buffer};
 
 lazy_static! {
     pub static ref FACTORIES: RwLock<HashMap<String, Box<dyn MechtronFactory>>> =
         RwLock::new(HashMap::new());
-    pub static ref MECHTRONS: RwLock<HashMap<Address, Arc<MechtronWrapper>>> =
+    pub static ref MECHTRONS: RwLock<HashMap<Point, Arc<MechtronWrapper>>> =
         RwLock::new(HashMap::new());
     pub static ref EXCHANGE_INDEX: AtomicUsize = AtomicUsize::new(0);
 }
@@ -101,15 +105,15 @@ pub fn mechtron_outlet_frame(frame_buffer_id: i32) {
         let call = membrane_consume_buffer(frame_buffer_id)?;
         let frame: outlet::Frame = bincode::deserialize(call.as_slice())?;
         match frame {
-            Frame::Init => {
+            outlet::Frame::Init => {
                 unsafe {
                     mechtron_init();
                 }
                 Ok(())
             }
             outlet::Frame::Assign(assign) => {
-log( format!("assigning mechtron: {}",assign.stub.address.to_string()).as_str() );
-                match assign.config.body {
+log( format!("assigning mechtron: {}",assign.stub.point.to_string()).as_str() );
+                match &assign.config.body {
                     ResourceConfigBody::Control => {
                         log("mechtron framework cannot create a Control")
                     }
@@ -117,22 +121,31 @@ log( format!("assigning mechtron: {}",assign.stub.address.to_string()).as_str() 
 log( format!("assigning mechtron NAMED: {}",mechtron_name).as_str() );
                         let mechtron = {
                             let factories = FACTORIES.read()?;
-                            let factory = factories.get(&mechtron_name).ok_or(format!(""))?;
+                            let factory = factories.get(&mechtron_name.to_string()).ok_or(format!(""))?;
                             factory.create(assign.stub.clone())?
                         };
 
-log( format!("created mechtron: {}",assign.stub.address.to_string()).as_str() );
+log( format!("created mechtron: {}",assign.stub.point.to_string()).as_str() );
                         let mechtron = MechtronWrapper::new(assign.stub.clone(), mechtron);
                         {
                             let mut write = MECHTRONS.write()?;
-log( format!("added mechtron : {}",assign.stub.address.to_string()).as_str() );
-                            write.insert(assign.stub.address.clone(), Arc::new(mechtron));
+log( format!("added mechtron : {}",assign.stub.point.to_string()).as_str() );
+                            write.insert(assign.stub.point.clone(), Arc::new(mechtron));
                         }
                     }
                 }
                 Ok(())
             }
-            Frame::ArtifactResponse(response) => Ok(()),
+            outlet::Frame::Artifact(response) => Ok(()),
+            Frame::Request(_) => {
+                unimplemented!()
+            }
+            Frame::Response(_) => {
+                unimplemented!()
+            }
+            Frame::Close(_) => {
+                unimplemented!()
+            }
         }
     }
 
@@ -174,11 +187,11 @@ pub fn mechtron_register(factory: Box<dyn MechtronFactory>) {
     );
 }
 
-fn mechtron_get(address: Address) -> Result<Arc<MechtronWrapper>, Error> {
+fn mechtron_get(point: Point) -> Result<Arc<MechtronWrapper>, Error> {
     let lock = MECHTRONS.read().unwrap();
-    Ok(lock.get(&address).cloned().ok_or(format!(
-        "failed to get mechtron with address: {}",
-        address.to_string()
+    Ok(lock.get(&point).cloned().ok_or(format!(
+        "failed to get mechtron with point: {}",
+        point.to_string()
     ))?)
 }
 
@@ -206,23 +219,23 @@ fn mechtron_read_request(request: i32) -> Result<Request,Error>{
 
 pub trait MechtronFactory: Sync + Send + 'static {
     fn mechtron_name(&self) -> String;
-    fn create(&self, stub: ResourceStub) -> Result<Box<dyn Mechtron>, Error>;
+    fn create(&self, stub: Stub) -> Result<Box<dyn Mechtron>, Error>;
 }
 
 pub struct MechtronWrapper {
-    pub stub: ResourceStub,
+    pub stub: Stub,
     pub mechtron: Box<dyn Mechtron>,
 }
 
 impl MechtronWrapper {
-    pub fn new(stub: ResourceStub, mechtron: Box<dyn Mechtron>) -> Self {
+    pub fn new(stub: Stub, mechtron: Box<dyn Mechtron>) -> Self {
         Self { stub, mechtron }
     }
 
     pub fn handle(&self, request: Request) -> Response {
         let core = self.mechtron.handle(self, request.clone());
         match core {
-            Ok(core) => core.into_response(self.stub.address.clone(), request.from, request.id),
+            Ok(core) => core.into_response(self.stub.point.clone(), request.from, request.id),
             Err(err) => {
                 // here we should also set the Status to a Panic state
                 request.fail(err.to_string().as_str())
@@ -236,25 +249,28 @@ impl MechtronWrapper {
 }
 
 impl MechtronCtx for MechtronWrapper {
-    fn stub(&self) -> &ResourceStub {
+    fn stub(&self) -> &Stub {
         &self.stub
     }
 }
 
 pub trait MechtronCtx {
-    fn stub(&self) -> &ResourceStub;
+    fn stub(&self) -> &Stub;
 
     fn send(&self, request: ProtoRequest) -> Response {
-        match request.clone().into_request(self.stub().address.clone()) {
+        unimplemented!()
+/*        match request.clone().into_request(self.stub().point.clone()) {
             Ok(request) => mechtron_send_inlet_request(request),
             Err(err) => Response {
                 id: unique_id(),
-                from: self.stub().address.clone(),
-                to: self.stub().address.clone(),
+                from: self.stub().point.clone(),
+                to: self.stub().point.clone(),
                 core: ResponseCore::fail(err.to_string().as_str()),
                 response_to: request.id.clone(),
             },
         }
+
+ */
     }
 }
 
@@ -264,7 +280,7 @@ pub trait Mechtron: Sync + Send + 'static {
             Action::Rc(_) => Ok(request.core.fail(
                 format!(
                     "Mechtron {} does not handle Rc actions",
-                    ctx.stub().address.to_string()
+                    ctx.stub().point.to_string()
                 )
                 .as_str(),
             )),
@@ -280,7 +296,7 @@ pub trait Mechtron: Sync + Send + 'static {
     ) -> Result<ResponseCore, Error> {
         Ok(request.fail(format!(
             "Mechtron '{}' does not have a Msg handler implementation",
-            ctx.stub().address.to_string()
+            ctx.stub().point.to_string()
         ).as_str()))
     }
 
@@ -291,7 +307,7 @@ pub trait Mechtron: Sync + Send + 'static {
     ) -> Result<ResponseCore, Error> {
         Ok(request.fail(format!(
             "Mechtron '{}' does not have an Http handler implementation",
-            ctx.stub().address.to_string()
+            ctx.stub().point.to_string()
         ).as_str()))
     }
 

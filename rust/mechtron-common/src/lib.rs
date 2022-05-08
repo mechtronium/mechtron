@@ -1,52 +1,27 @@
+#![allow(warnings)]
+#![no_std]
+
+#[cfg(feature = "std")]
+extern crate std;
+
+extern crate alloc;
+
+
 use serde::{Deserialize, Serialize};
 
 
 
 pub mod inlet{
-    use std::convert::TryFrom;
-    use mesh_portal::error::Error;
+    use mesh_portal::error::MsgErr;
     use mesh_portal::version::latest::artifact::{ArtifactRequest, ArtifactResponse};
-    use mesh_portal::version::latest::id::Address;
     use mesh_portal::version::latest::messaging::{Request, Response};
     use mesh_portal::version::latest::portal;
     use mesh_portal::version::latest::portal::Exchanger;
+    use mesh_portal::version::latest::log;
+    use mesh_portal::version::latest::log::Log;
     use serde::{Serialize,Deserialize};
 
-    #[derive(Debug,Clone,Serialize,Deserialize)]
-    pub enum LogSrc {
-        Wasm(Address),
-        Mechtron(Address)
-    }
 
-    impl ToString for LogSrc {
-        fn to_string(&self) -> String {
-           match self {
-               LogSrc::Wasm(address) => format!("Wasm({})",address.to_string()),
-               LogSrc::Mechtron(address) => format!("Mechtron({})",address.to_string())
-           }
-        }
-    }
-
-    #[derive(Debug,Clone,Serialize,Deserialize)]
-    pub struct Log {
-        pub message: String,
-        pub src: LogSrc
-    }
-
-    impl ToString for Log {
-        fn to_string(&self) -> String {
-            format!("{}: {}", self.src.to_string(), self.message )
-        }
-    }
-
-    impl Into<portal::inlet::Log> for Log {
-        fn into(self) -> portal::inlet::Log {
-            portal::inlet::Log {
-                src: self.src.to_string(),
-                message: self.message
-            }
-        }
-    }
 
     #[derive(Debug,Clone,Serialize,Deserialize)]
     pub enum Frame {
@@ -70,16 +45,15 @@ pub mod inlet{
 
 
 pub mod outlet {
-    use std::convert::TryFrom;
-    use mesh_portal::error::Error;
+    use mesh_portal::error::MsgErr;
     use mesh_portal::version::latest::artifact::ArtifactResponse;
     use mesh_portal::version::latest::config::Assign;
     use mesh_portal::version::latest::id::Version;
     use mesh_portal::version::latest::messaging::{Request, Response};
     use mesh_portal::version::latest::portal;
     use mesh_portal::version::latest::portal::Exchanger;
-    use mesh_portal::version::latest::resource::ResourceStub;
     use serde::{Serialize,Deserialize};
+    use core::convert::TryFrom;
 
     #[derive(Debug,Clone,Serialize,Deserialize)]
     pub enum Frame {
@@ -106,7 +80,7 @@ pub mod outlet {
     }
 
     impl TryFrom<portal::outlet::Frame> for Frame {
-        type Error = Error;
+        type Error = MsgErr;
 
         fn try_from(frame: portal::outlet::Frame) -> Result<Self, Self::Error> {
             match frame {
@@ -125,5 +99,15 @@ pub mod outlet {
                 }
             }
         }
+    }
+}
+
+
+#[cfg(test)]
+pub mod test {
+
+    #[test]
+    pub fn test () {
+
     }
 }

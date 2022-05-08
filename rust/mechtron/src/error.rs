@@ -2,7 +2,6 @@ use bincode::ErrorKind;
 use std::sync::{PoisonError, RwLockReadGuard, Arc, RwLockWriteGuard};
 use std::collections::HashMap;
 use crate::{MechtronFactory, MechtronWrapper};
-use mesh_portal::version::latest::id::Address;
 
 pub struct Error {
     pub message: String
@@ -31,8 +30,8 @@ impl From<String> for Error {
 }
 
 
-impl From<mesh_portal::error::Error> for Error {
-    fn from(error: mesh_portal::error::Error) -> Self {
+impl From<mesh_portal::error::MsgErr> for Error {
+    fn from(error: mesh_portal::error::MsgErr) -> Self {
         Self {
             message: error.to_string()
         }
